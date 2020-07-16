@@ -145,6 +145,26 @@ class HubitatVoltageSensor(HubitatSensor):
         self._device_class = DEVICE_CLASS_POWER
 
 
+class HubitatAqiSensor(HubitatSensor):
+    """An AQI sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize an AQI sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "aqi"
+        self._units = "aqi"
+
+
+class HubitatPm25Sensor(HubitatSensor):
+    """A PM2.5 sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a PM2.5 sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "pm25"
+        self._units = "ug/m3"
+
+
 _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
     (ATTR_BATTERY, HubitatBatterySensor),
     (ATTR_HUMIDITY, HubitatHumiditySensor),
@@ -152,6 +172,8 @@ _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
     (ATTR_POWER, HubitatPowerSensor),
     (ATTR_TEMPERATURE, HubitatTemperatureSensor),
     (ATTR_VOLTAGE, HubitatVoltageSensor),
+    ("aqi", HubitatAqiSensor),
+    ("pm25", HubitatPm25Sensor),
 )
 
 
