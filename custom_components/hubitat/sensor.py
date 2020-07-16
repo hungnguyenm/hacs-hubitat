@@ -153,6 +153,7 @@ class HubitatAqiSensor(HubitatSensor):
         super().__init__(*args, **kwargs)
         self._attribute = "aqi"
         self._units = "aqi"
+        self._device_class = None
 
 
 class HubitatPm25Sensor(HubitatSensor):
@@ -163,6 +164,7 @@ class HubitatPm25Sensor(HubitatSensor):
         super().__init__(*args, **kwargs)
         self._attribute = "pm25"
         self._units = "ug/m3"
+        self._device_class = None
 
 
 _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
