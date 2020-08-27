@@ -152,7 +152,7 @@ class HubitatAqiSensor(HubitatSensor):
         """Initialize an AQI sensor."""
         super().__init__(*args, **kwargs)
         self._attribute = "aqi"
-        self._units = "aqi"
+        self._units = "AQI"
         self._device_class = None
 
 
