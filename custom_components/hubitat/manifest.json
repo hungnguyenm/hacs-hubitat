@@ -10,5 +10,6 @@
   "dependencies": [],
   "codeowners": [
     "@jason0x43"
-  ]
+  ],
+  "version": "1.0.0"
 }
