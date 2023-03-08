@@ -167,6 +167,28 @@ class HubitatPm25Sensor(HubitatSensor):
         self._device_class = None
 
 
+class HubitatRainRateSensor(HubitatSensor):
+    """A rain rate sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a rain rate sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "rainRate"
+        self._units = "in"
+        self._device_class = None
+
+
+class HubitatRainDailySensor(HubitatSensor):
+    """A rain daily sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a rain daily sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "rainDaily"
+        self._units = "in"
+        self._device_class = None
+
+
 _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
     (ATTR_BATTERY, HubitatBatterySensor),
     (ATTR_HUMIDITY, HubitatHumiditySensor),
@@ -176,6 +198,8 @@ _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
     (ATTR_VOLTAGE, HubitatVoltageSensor),
     ("aqi", HubitatAqiSensor),
     ("pm25", HubitatPm25Sensor),
+    ("rainRate", HubitatRainRateSensor),
+    ("rainDaily", HubitatRainDailySensor),
 )
 
 
