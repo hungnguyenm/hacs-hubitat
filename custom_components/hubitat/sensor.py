@@ -20,7 +20,7 @@ from homeassistant.components.sensor import (
     DEVICE_CLASS_TEMPERATURE,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import POWER_WATT, TEMP_CELSIUS, TEMP_FAHRENHEIT
+from homeassistant.const import DEGREE, POWER_WATT, TEMP_CELSIUS, TEMP_FAHRENHEIT
 from homeassistant.core import HomeAssistant
 
 from .const import TEMP_F
@@ -189,6 +189,49 @@ class HubitatRainDailySensor(HubitatSensor):
         self._device_class = None
 
 
+class HubitatUVIndexSensor(HubitatSensor):
+    """A UV index sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a UV index sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "ultravioletIndex"
+        self._device_class = None
+
+
+class HubitatWindDirectionSensor(HubitatSensor):
+    """A wind direction sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a wind direction sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "windDirection"
+        self._units = DEGREE
+        self._device_class = None
+
+
+class HubitatWindSpeedSensor(HubitatSensor):
+    """A wind speed sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a wind speed sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "windSpeed"
+        self._units = "mph"
+        self._device_class = None
+
+
+class HubitatWindGustSensor(HubitatSensor):
+    """A wind gust sensor."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a wind gust sensor."""
+        super().__init__(*args, **kwargs)
+        self._attribute = "windGust"
+        self._units = "mph"
+        self._device_class = None
+
+
 _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
     (ATTR_BATTERY, HubitatBatterySensor),
     (ATTR_HUMIDITY, HubitatHumiditySensor),
@@ -200,6 +243,10 @@ _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatSensor]], ...] = (
     ("pm25", HubitatPm25Sensor),
     ("rainRate", HubitatRainRateSensor),
     ("rainDaily", HubitatRainDailySensor),
+    ("ultravioletIndex", HubitatUVIndexSensor),
+    ("windDirection", HubitatWindDirectionSensor),
+    ("windSpeed", HubitatWindSpeedSensor),
+    ("windGust", HubitatWindGustSensor),
 )
 
 
