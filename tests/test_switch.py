@@ -1,24 +1,17 @@
-from asyncio import Future
-from typing import Any, Awaitable, List
+import pytest
+from typing import List
+from unittest.mock import Mock, call, patch
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity import Entity
 
-from tests.async_mock import Mock, call, patch
 
-
+@pytest.mark.asyncio
 @patch("custom_components.hubitat.switch.create_and_add_entities")
 @patch("custom_components.hubitat.switch.create_and_add_event_emitters")
 async def test_setup_entry(create_emitters, create_entities) -> None:
-    def _create_entities(*args: Any) -> Awaitable[List[Any]]:
-        future: Future[List[Any]] = Future()
-        future.set_result([])
-        return future
-
-    create_entities.side_effect = _create_entities
-
-    create_emitters.return_value = Future()
-    create_emitters.return_value.set_result(None)
+    create_entities.return_value = []
+    create_emitters.return_value = None
 
     from custom_components.hubitat.switch import (
         async_setup_entry,
@@ -29,7 +22,7 @@ async def test_setup_entry(create_emitters, create_entities) -> None:
     mock_hass = Mock(spec=["async_register"])
     mock_config_entry = Mock(spec=ConfigEntry)
 
-    def add_entities(entities: List[Entity]) -> None:
+    def add_entities(_: List[Entity]) -> None:
         pass
 
     mock_add_entities = Mock(spec=add_entities)

@@ -1,51 +1,27 @@
 """Hubitat binary sensor entities."""
 
-from logging import getLogger
 import re
-from typing import List, Optional, Tuple, Type
-
-from hubitatmaker import (
-    ATTR_ACCELERATION,
-    ATTR_CARBON_MONOXIDE,
-    ATTR_CONTACT,
-    ATTR_MOTION,
-    ATTR_PRESENCE,
-    ATTR_SMOKE,
-    ATTR_WATER,
-    Device,
-)
+from typing import Dict, List, Optional, Sequence, Tuple, Type
 
 from homeassistant.components.binary_sensor import (
-    DEVICE_CLASS_DOOR,
-    DEVICE_CLASS_GARAGE_DOOR,
-    DEVICE_CLASS_GAS,
-    DEVICE_CLASS_MOISTURE,
-    DEVICE_CLASS_MOTION,
-    DEVICE_CLASS_MOVING,
-    DEVICE_CLASS_PRESENCE,
-    DEVICE_CLASS_SMOKE,
-    DEVICE_CLASS_WINDOW,
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .device import Hub, HubitatEntity
 from .entities import create_and_add_entities
+from .hubitatmaker import Device, DeviceAttribute
 from .types import EntityAdder
 
-try:
-    from homeassistant.components.binary_sensor import BinarySensorEntity
-except ImportError:
-    from homeassistant.components.binary_sensor import (  # type: ignore
-        BinarySensorDevice as BinarySensorEntity,
-    )
-
-
-_LOGGER = getLogger(__name__)
-
 _CONTACT_MATCHERS = (
-    (re.compile("garage door", re.IGNORECASE), DEVICE_CLASS_GARAGE_DOOR),
-    (re.compile("window", re.IGNORECASE), DEVICE_CLASS_WINDOW),
+    (re.compile("garage door", re.IGNORECASE), BinarySensorDeviceClass.GARAGE_DOOR),
+    (re.compile("window", re.IGNORECASE), BinarySensorDeviceClass.WINDOW),
+)
+
+_PRESENCE_MATCHERS = (
+    (re.compile("presence", re.IGNORECASE), BinarySensorDeviceClass.PRESENCE),
 )
 
 
@@ -57,6 +33,11 @@ class HubitatBinarySensor(HubitatEntity, BinarySensorEntity):
     _device_class: str
 
     @property
+    def device_attrs(self) -> Optional[Sequence[str]]:
+        """Return this entity's associated attributes"""
+        return (self._attribute,)
+
+    @property
     def is_on(self) -> bool:
         """Return True if this sensor is on/active."""
         return self.get_str_attr(self._attribute) == self._active_state
@@ -64,7 +45,7 @@ class HubitatBinarySensor(HubitatEntity, BinarySensorEntity):
     @property
     def name(self) -> str:
         """Return the display name for this sensor."""
-        return f"{super().name} {self._attribute}"
+        return f"{super().name} {self._attribute}".title()
 
     @property
     def old_unique_ids(self) -> List[str]:
@@ -92,23 +73,39 @@ class HubitatAccelerationSensor(HubitatBinarySensor):
     """An acceleration sensor."""
 
     _active_state = "active"
-    _attribute = ATTR_ACCELERATION
-    _device_class = DEVICE_CLASS_MOVING
+    _attribute = DeviceAttribute.ACCELERATION
+    _device_class = BinarySensorDeviceClass.MOVING
+
+
+class HubitatCo2Sensor(HubitatBinarySensor):
+    """A carbon dioxide sensor."""
+
+    _active_state = "detected"
+    _attribute = DeviceAttribute.CARBON_DIOXIDE
+    _device_class = BinarySensorDeviceClass.GAS
 
 
 class HubitatCoSensor(HubitatBinarySensor):
     """A carbon monoxide sensor."""
 
     _active_state = "detected"
-    _attribute = ATTR_CARBON_MONOXIDE
-    _device_class = DEVICE_CLASS_GAS
+    _attribute = DeviceAttribute.CARBON_MONOXIDE
+    _device_class = BinarySensorDeviceClass.GAS
+
+
+class HubitatNaturalGasSensor(HubitatBinarySensor):
+    """A natural gas sensor."""
+
+    _active_state = "detected"
+    _attribute = DeviceAttribute.NATURAL_GAS
+    _device_class = BinarySensorDeviceClass.GAS
 
 
 class HubitatContactSensor(HubitatBinarySensor):
     """A generic contact sensor."""
 
     _active_state = "open"
-    _attribute = ATTR_CONTACT
+    _attribute = DeviceAttribute.CONTACT
 
     def __init__(self, hub: Hub, device: Device):
         """Initialize a contact sensor."""
@@ -120,66 +117,124 @@ class HubitatMoistureSensor(HubitatBinarySensor):
     """A moisture sensor."""
 
     _active_state = "wet"
-    _attribute = ATTR_WATER
-    _device_class = DEVICE_CLASS_MOISTURE
+    _attribute = DeviceAttribute.WATER
+    _device_class = BinarySensorDeviceClass.MOISTURE
 
 
 class HubitatMotionSensor(HubitatBinarySensor):
     """A motion sensor."""
 
     _active_state = "active"
-    _attribute = ATTR_MOTION
-    _device_class = DEVICE_CLASS_MOTION
+    _attribute = DeviceAttribute.MOTION
+    _device_class = BinarySensorDeviceClass.MOTION
 
 
 class HubitatPresenceSensor(HubitatBinarySensor):
     """A presence sensor."""
 
     _active_state = "present"
-    _attribute = ATTR_PRESENCE
-    _device_class = DEVICE_CLASS_PRESENCE
+    _attribute = DeviceAttribute.PRESENCE
+
+    def __init__(self, hub: Hub, device: Device):
+        """Initialize a presence sensor."""
+        super().__init__(hub=hub, device=device)
+        self._device_class = _get_presence_device_class(device)
 
 
 class HubitatSmokeSensor(HubitatBinarySensor):
     """A smoke sensor."""
 
-    _active_state = "active"
-    _attribute = ATTR_SMOKE
-    _device_class = DEVICE_CLASS_SMOKE
+    _active_state = "detected"
+    _attribute = DeviceAttribute.SMOKE
+    _device_class = BinarySensorDeviceClass.SMOKE
 
 
+class HubitatSoundSensor(HubitatBinarySensor):
+    """A sound sensor."""
+
+    _active_state = "detected"
+    _attribute = DeviceAttribute.SOUND
+    _device_class = BinarySensorDeviceClass.SOUND
+
+
+class HubitatTamperSensor(HubitatBinarySensor):
+    """A tamper sensor."""
+
+    _active_state = "detected"
+    _attribute = DeviceAttribute.TAMPER
+    _device_class = BinarySensorDeviceClass.TAMPER
+
+
+class HubitatShockSensor(HubitatBinarySensor):
+    """A shock sensor."""
+
+    _active_state = "detected"
+    _attribute = DeviceAttribute.SHOCK
+    _device_class = BinarySensorDeviceClass.VIBRATION
+
+
+class HubitatHeatSensor(HubitatBinarySensor):
+    """A heatAlarm sensor."""
+
+    _active_state = "overheat"
+    _attribute = DeviceAttribute.HEAT_ALARM
+    _device_class = BinarySensorDeviceClass.HEAT
+
+
+# Presence is handled specially in async_setup_entry()
 _SENSOR_ATTRS: Tuple[Tuple[str, Type[HubitatBinarySensor]], ...] = (
-    (ATTR_ACCELERATION, HubitatAccelerationSensor),
-    (ATTR_CARBON_MONOXIDE, HubitatCoSensor),
-    (ATTR_CONTACT, HubitatContactSensor),
-    (ATTR_MOTION, HubitatMotionSensor),
-    (ATTR_PRESENCE, HubitatPresenceSensor),
-    (ATTR_SMOKE, HubitatSmokeSensor),
-    (ATTR_WATER, HubitatMoistureSensor),
+    (DeviceAttribute.ACCELERATION, HubitatAccelerationSensor),
+    (DeviceAttribute.CARBON_DIOXIDE, HubitatCo2Sensor),
+    (DeviceAttribute.CARBON_MONOXIDE, HubitatCoSensor),
+    (DeviceAttribute.CONTACT, HubitatContactSensor),
+    (DeviceAttribute.HEAT_ALARM, HubitatHeatSensor),
+    (DeviceAttribute.MOTION, HubitatMotionSensor),
+    (DeviceAttribute.NATURAL_GAS, HubitatNaturalGasSensor),
+    (DeviceAttribute.PRESENCE, HubitatPresenceSensor),
+    (DeviceAttribute.SHOCK, HubitatShockSensor),
+    (DeviceAttribute.SMOKE, HubitatSmokeSensor),
+    (DeviceAttribute.SOUND, HubitatSoundSensor),
+    (DeviceAttribute.TAMPER, HubitatTamperSensor),
+    (DeviceAttribute.WATER, HubitatMoistureSensor),
 )
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: EntityAdder,
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: EntityAdder,
 ) -> None:
-    """Initialize light devices."""
+    """Initialize binary sensor entities."""
+
     for attr in _SENSOR_ATTRS:
-        await create_and_add_entities(
-            hass,
-            entry,
-            async_add_entities,
-            "binary_sensor",
-            attr[1],
-            lambda dev: attr[0] in dev.attributes,
+
+        def is_sensor(
+            device: Device, overrides: Optional[Dict[str, str]] = None
+        ) -> bool:
+            return attr[0] in device.attributes
+
+        create_and_add_entities(
+            hass, config_entry, async_add_entities, "binary_sensor", attr[1], is_sensor
         )
 
 
 def _get_contact_device_class(device: Device) -> str:
     """Guess the type of contact sensor from the device's label."""
-    name = device.name
+    label = device.label
 
     for matcher in _CONTACT_MATCHERS:
-        if matcher[0].match(name):
+        if matcher[0].search(label):
             return matcher[1]
 
-    return DEVICE_CLASS_DOOR
+    return BinarySensorDeviceClass.DOOR
+
+
+def _get_presence_device_class(device: Device) -> str:
+    """Guess the type of presence sensor from the device's label."""
+    label = device.label
+
+    for matcher in _PRESENCE_MATCHERS:
+        if matcher[0].search(label):
+            return matcher[1]
+
+    return BinarySensorDeviceClass.CONNECTIVITY

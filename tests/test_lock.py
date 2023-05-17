@@ -1,7 +1,7 @@
-from hubitatmaker.const import ATTR_LOCK_CODES
-from hubitatmaker.types import Attribute
+from unittest.mock import Mock
 
-from tests.async_mock import Mock
+from custom_components.hubitat.hubitatmaker.const import DeviceAttribute
+from custom_components.hubitat.hubitatmaker.types import Attribute
 
 
 def test_normal_lock_codes() -> None:
@@ -11,9 +11,9 @@ def test_normal_lock_codes() -> None:
     device = Mock()
     device.configure_mock(
         attributes={
-            ATTR_LOCK_CODES: Attribute(
+            DeviceAttribute.LOCK_CODES: Attribute(
                 {
-                    "name": ATTR_LOCK_CODES,
+                    "name": DeviceAttribute.LOCK_CODES,
                     "currentValue": '{"1":{"name":"Test","code":"1234"}}',
                 }
             )
@@ -23,7 +23,10 @@ def test_normal_lock_codes() -> None:
     from custom_components.hubitat.lock import HubitatLock
 
     lock = HubitatLock(hub=hub, device=device)
-    assert isinstance(lock.codes, dict)
+    codes = lock.codes
+    assert isinstance(codes, dict)
+    assert codes["1"].get("name") == "Test"
+    assert codes["1"].get("code") is None
 
 
 def test_encrypted_lock_codes() -> None:
@@ -33,8 +36,8 @@ def test_encrypted_lock_codes() -> None:
     device = Mock()
     device.configure_mock(
         attributes={
-            ATTR_LOCK_CODES: Attribute(
-                {"name": ATTR_LOCK_CODES, "currentValue": "abc1235Qbxyz"}
+            DeviceAttribute.LOCK_CODES: Attribute(
+                {"name": DeviceAttribute.LOCK_CODES, "currentValue": "abc1235Qbxyz"}
             )
         }
     )

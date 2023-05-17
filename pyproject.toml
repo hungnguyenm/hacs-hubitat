@@ -1,26 +1,66 @@
-[tool.poetry]
-name = "hacs-hubitat"
-version = "0.5.1"
+[project]
+name = "hubitat"
+version = "0.9.5"
 description = "A Hubitat integration for Home Assistant"
-authors = ["Jason Cheatham <jason@jasoncheatham.com>"]
+authors = [
+    {name = "Jason Cheatham", email = "jason@jasoncheatham.com"},
+]
+dependencies = []
+requires-python = ">=3.10,<4.0"
+license = {text = "MIT"}
 
-[tool.poetry.dependencies]
-python = "^3.7"
+[project.urls]
+homepage = "https://github.com/jason0x43/hacs-hubitat"
 
-[tool.poetry.dev-dependencies]
-pytest = "^5.4"
-pytest-asyncio = "^0.12.0"
-homeassistant = "^0.110.0"
-black = "^19.10b0"
-flake8 = "^3.8.1"
-mypy = "^0.770"
-isort = "^4.3.21"
-pre-commit = "^2.4.0"
-flake8-pyi = "^20.5.0"
-hubitatmaker = {path = "../hubitatmaker.git"} 
-pytest-aiohttp = "^0.3.0"
-asynctest = "^0.13.0"
+[project.optional-dependencies]
+[tool.pdm.scripts]
+init = {shell = "pdm install && pre-commit install"}
+test = {shell = "pyright custom_components/hubitat && pytest tests"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pdm]
+includes = []
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "black>=21.12b0",
+    "ruff",
+    "pre-commit<3.0.0,>=2.4.0",
+    "homeassistant==2023.4.0",
+    "pytest-asyncio>=0.16.0",
+    "setuptools>=62.2.0",
+]
+
+[tool.black]
+line-length = 88
 
 [build-system]
-requires = ["poetry>=0.12"]
-build-backend = "poetry.masonry.api"
+requires = ["pdm-pep517"]
+build-backend = "pdm.pep517.api"
+
+[tool.pyright]
+include = ["custom_components/hubitat"]
+exclude = ["**/__pycache__"]
+extraPaths = ["__pypackages__/3.9/lib"]
+stubPath = "."
+reportDuplicateImport = true
+reportMissingImports = true
+reportOptionalCall = true
+reportOptionalMemberAccess = true
+reportOptionalSubscript = true
+reportUnusedClass = true
+reportUnusedFunction = true
+reportUnusedImport = true
+reportUnusedVariable = true
+
+[tool.ruff]
+select = ["E", "W", "F", "PYI", "I"]
+
+[tool.ruff.isort]
+combine-as-imports = true
+order-by-type = true
+force-wrap-aliases = true
+known-first-party = ["homeassistant", "tests"]
+forced-separate = ["tests"]

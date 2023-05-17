@@ -1,15 +1,14 @@
 {
+  "version": "0.9.5",
   "domain": "hubitat",
   "name": "Hubitat",
   "config_flow": true,
-  "documentation": "https://github.com/jason0x43/hass-components",
+  "documentation": "https://github.com/jason0x43/hacs-hubitat",
+  "issue_tracker": "https://github.com/jason0x43/hacs-hubitat/issues",
   "ssdp": [],
   "requirements": ["hubitatmaker>=0.6.1,<0.7.0"],
   "zeroconf": [],
   "homekit": {},
   "dependencies": [],
-  "codeowners": [
-    "@jason0x43"
-  ],
-  "version": "1.0.0"
+  "codeowners": ["@jason0x43"]
 }
