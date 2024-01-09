@@ -1,12 +1,12 @@
 [project]
 name = "hubitat"
-version = "0.9.5"
+version = "0.9.19"
 description = "A Hubitat integration for Home Assistant"
 authors = [
     {name = "Jason Cheatham", email = "jason@jasoncheatham.com"},
 ]
 dependencies = []
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
 
 [project.urls]
@@ -19,16 +19,17 @@ test = {shell = "pyright custom_components/hubitat && pytest tests"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.pdm]
-includes = []
+filterwarnings = [
+    "ignore::DeprecationWarning:pkg_resources",
+    "ignore:Inheritance class HomeAssistantApplication:DeprecationWarning"
+]
 
 [tool.pdm.dev-dependencies]
 dev = [
     "black>=21.12b0",
     "ruff",
     "pre-commit<3.0.0,>=2.4.0",
-    "homeassistant==2023.4.0",
+    "homeassistant==2023.12.4",
     "pytest-asyncio>=0.16.0",
     "setuptools>=62.2.0",
 ]

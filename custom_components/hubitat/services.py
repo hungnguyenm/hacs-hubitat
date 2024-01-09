@@ -1,5 +1,5 @@
 from logging import getLogger
-from typing import Union, cast
+from typing import cast
 
 import voluptuous as vol
 
@@ -22,7 +22,7 @@ from .const import (
     ServiceName,
 )
 from .device import HubitatEntity
-from .hub import get_hub
+from .hub import Hub
 from .lock import HubitatLock
 
 _LOGGER = getLogger(__name__)
@@ -63,17 +63,17 @@ def async_register_services(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    hub = get_hub(hass, entry.entry_id)
-
     def get_entity(service: ServiceCall) -> HubitatEntity:
         entity_id = cast(str, service.data.get(ATTR_ENTITY_ID))
-        for entity in hub.entities:
-            if entity.entity_id == entity_id:
-                return cast(HubitatEntity, entity)
+        hubs = cast(list[Hub], hass.data[DOMAIN].values())
+        for hub in hubs:
+            for entity in hub.entities:
+                if entity.entity_id == entity_id:
+                    return cast(HubitatEntity, entity)
         raise ValueError(f"Invalid or unknown entity '{entity_id}'")
 
     async def clear_code(service: ServiceCall) -> None:
-        entity = cast(Union[HubitatLock, HubitatSecurityKeypad], get_entity(service))
+        entity = cast(HubitatLock | HubitatSecurityKeypad, get_entity(service))
         pos = cast(int, service.data.get(ATTR_POSITION))
         await entity.clear_code(pos)
 
@@ -89,14 +89,14 @@ def async_register_services(
             await entity.send_command(cmd)
 
     async def set_code(service: ServiceCall) -> None:
-        entity = cast(Union[HubitatLock, HubitatSecurityKeypad], get_entity(service))
+        entity = cast(HubitatLock | HubitatSecurityKeypad, get_entity(service))
         pos = cast(int, service.data.get(ATTR_POSITION))
         code = cast(str, service.data.get(ATTR_CODE))
         name = cast(str, service.data.get(ATTR_NAME))
         await entity.set_code(pos, code, name)
 
     async def set_code_length(service: ServiceCall) -> None:
-        entity = cast(Union[HubitatLock, HubitatSecurityKeypad], get_entity(service))
+        entity = cast(HubitatLock | HubitatSecurityKeypad, get_entity(service))
         length = cast(int, service.data.get(ATTR_LENGTH))
         await entity.set_code_length(length)
 
@@ -110,37 +110,35 @@ def async_register_services(
         delay = cast(int, service.data.get(ATTR_LENGTH))
         await entity.set_exit_delay(delay)
 
-    async def set_hsm(service: ServiceCall) -> None:
-        target_hub = hub
+    def get_target_hubs(service: ServiceCall):
+        """
+        Return the target hubs for a service call.
+
+        If ATTR_HUB is specified, return the hub with that ID. Otherwise,
+        return all the hubs.
+        """
+        hubs = []
         if ATTR_HUB in service.data:
             hub_id = cast(str, service.data.get(ATTR_HUB)).lower()
-            found_hub = False
-            for _hub in hass.data[DOMAIN].values():
-                if _hub.id == hub_id:
-                    found_hub = True
-                    target_hub = _hub
-            if not found_hub:
+            for hub in hass.data[DOMAIN].values():
+                if hub.id == hub_id:
+                    hubs.append(hub)
+            if len(hubs) == 0:
                 _LOGGER.error("Could not find a hub with ID %s", hub_id)
-                return
+        else:
+            hubs = cast(list[Hub], hass.data[DOMAIN].values())
 
+        return hubs
+
+    async def set_hsm(service: ServiceCall) -> None:
         command = cast(str, service.data.get(ATTR_COMMAND))
-        await target_hub.set_hsm(command)
+        for hub in get_target_hubs(service):
+            await hub.set_hsm(command)
 
     async def set_hub_mode(service: ServiceCall) -> None:
-        target_hub = hub
-        if ATTR_HUB in service.data:
-            hub_id = cast(str, service.data.get(ATTR_HUB)).lower()
-            found_hub = False
-            for _hub in hass.data[DOMAIN].values():
-                if _hub.id == hub_id:
-                    found_hub = True
-                    target_hub = _hub
-            if not found_hub:
-                _LOGGER.error("Could not find a hub with ID %s", hub_id)
-                return
-
         mode = cast(str, service.data.get(ATTR_MODE))
-        await target_hub.set_mode(mode)
+        for hub in get_target_hubs(service):
+            await hub.set_mode(mode)
 
     hass.services.async_register(
         DOMAIN, ServiceName.CLEAR_CODE, clear_code, schema=CLEAR_CODE_SCHEMA

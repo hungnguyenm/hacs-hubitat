@@ -3,29 +3,20 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
 This integration uses [Hubitat’s](hubitat.com)
-[Maker API](https://docs.hubitat.com/index.php?title=Hubitat™_Maker_API) to make
-Hubitat devices available for use with Home Assistant.
+[Maker API](https://docs.hubitat.com/index.php?title=Hubitat™_Maker_API) to
+make Hubitat devices available for use with Home Assistant.
 
-<!-- vim-markdown-toc GFM -->
+## Quick Start
 
-* [Features](#features)
-* [Installation](#installation)
-	* [HACS](#hacs)
-	* [Manually](#manually)
-* [Setup](#setup)
-	* [Event server](#event-server)
-	* [Device types](#device-types)
-	* [Adding new devices](#adding-new-devices)
-* [Services](#services)
-* [Event-emitting devices](#event-emitting-devices)
-* [Updating](#updating)
-* [Troubleshooting](#troubleshooting)
-	* [Checking device capabilities](#checking-device-capabilities)
-	* [Logging](#logging)
-	* [HSM status or modes not updating](#hsm-status-or-modes-not-updating)
-* [Developing](#developing)
+1. Create a Maker API instance in Hubitat
+2. Add the devices you want to share in Maker API
+3. Install HACS
+4. Add the Hubitat integration in HACS
+5. Add an instance of the Hubitat integration in Home Assistant's Integrations
+   page
 
-<!-- vim-markdown-toc -->
+> ⚠️ If you notice that devices aren't updating in Home Assistant, see the
+> [Troubleshooting](#troubleshooting) section below.
 
 ## Features
 
@@ -73,7 +64,7 @@ The second option is to install this integration manually by cloning the
 repository and copying the integration files to the proper location in your HA
 config directory.
 
-Note that you will need to restart Home Assistant after installion, whichever
+Note that you will need to restart Home Assistant after installation, whichever
 method is used.
 
 ### HACS
@@ -93,6 +84,12 @@ Clone this repository and copy the `custom_components/hubitat` folder into your
 
 ## Setup
 
+The basic setup process is:
+
+1. Create a Maker API instance in Hubitat
+2. Add the devices you want to use in HA to the Maker API instance
+3. Setup the integration in HA
+
 First, create a Maker API instance in the Hubitat UI. Add whatever devices you’d
 like to make available to Home Assistant. If you plan to use the integration
 over SSL, you‘ll probably want to enable the “Ignore SSL Certificates” toggle.
@@ -106,6 +103,8 @@ Home Assistant UI and click the “+” button to add a new integration. Pick
 - The app ID of the Maker API instance (the 2, 3 or 4 digit number after
   `/apps/api/` in any of the Maker API URLs)
 - The API access token
+- Optional: An address for the event server to listen on (more about this
+  below); this will be chosen automatically by default
 - Optional: A port for the event server to listen on (more about this below);
   this will be chosen automatically by default
 - Optional: Provide the relative paths to an SSL private key and certificate
@@ -124,6 +123,9 @@ To receive these events, the integration starts up a Python-based web server and
 updates the POST URL setting in the Maker API instance. Note that for this to
 work, Hubitat must be able to see your Home Assistant server on your local
 network.
+
+> ⚠️ Note that the event server URL, if specified, should only include a
+> protocol and a host, _not_ a path. The server always listens at `/`.
 
 ### Device types
 
@@ -223,9 +225,9 @@ entities in Home Assistant.
 
 Event emitting devices can be used as triggers in Home Assistant automations, or
 in Node Red. In Home Assistant, you can use event emitters as “Device” triggers.
-Whenever a the device emits an event, such as a button press, the automation
-will be triggered. In Node Red, a workflow can listen for `hubitat_event` events
-and filter them based on properties in `payload.event`.
+Whenever a device emits an event, such as a button press, the automation will be
+triggered. In Node Red, a workflow can listen for `hubitat_event` events and
+filter them based on properties in `payload.event`.
 
 ## Updating
 
@@ -237,6 +239,33 @@ Note that you will need to restart Home Assistant after updating, whichever
 method is used.
 
 ## Troubleshooting
+
+### Devices aren't updating
+
+If the integration was set up successfully but devices aren't updating, the
+problem is almost always that Hubitat is unable to send messages to Home
+Assistant. Just because HA can talk to Hubitat does _not_ mean that Hubitat can
+talk back to HA. This usually happens when Home Assistant is running in a VM or
+Docker container that hasn't been bridged to the local network. In this
+situation, the URL that the integration tells Maker API to send device events to
+will be an address on the virtualization system's internal network, which
+Hubitat won't be able to address.
+
+There are two solutions. One is to update the container or VM to use network
+bridging, so that the virtual system appears like a host on the local network.
+In this situation, HA's network address will be directly visible to Hubitat, so
+the integration will be able to set things up automatically.
+
+The second solution is to manually set the event server URL and port values in
+the integration to something that Hubitat _can_ see. The event server URL should
+point to the host that's running your Home Assistant VM or container. For
+example, if the host running the HA instance is on the local network at
+192.168.0.10, then the event server URL would be set to http://192.168.0.10. The
+port should be set to some open port value (e.g., 12345), and then this port
+must be mapped from the host to the HA VM/container.
+
+> ⚠️ Note that the event server URL should only include a protocol and a host,
+> _not_ a path. The server always listens at `/`.
 
 ### Checking device capabilities
 
@@ -407,7 +436,7 @@ logging:
 3. Restart Home Assistant
 
 If you open Home Assistant's log file (`config/home-assistant.log`) after HA
-restarts, you should see quite a few messages related to hubitat (mixed in with
+restarts, you should see quite a few messages related to Hubitat (mixed in with
 messages for other components), like:
 
 ```

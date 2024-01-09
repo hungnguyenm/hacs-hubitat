@@ -1,8 +1,10 @@
 """Classes for managing Hubitat devices."""
 
-from json import loads
+from datetime import datetime
 from logging import getLogger
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, NotRequired, TypedDict, Unpack
+
+from typing_extensions import override
 
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry
@@ -10,7 +12,7 @@ from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 from .hub import Hub
-from .hubitatmaker import Device, Event
+from .hubitatmaker import Device, DeviceAttribute, Event
 from .types import Removable, UpdateableEntity
 from .util import get_hub_device_id
 
@@ -20,20 +22,21 @@ _LOGGER = getLogger(__name__)
 class HubitatBase(Removable):
     """Base class for Hubitat entities and event emitters."""
 
-    def __init__(self, hub: Hub, device: Device, temp: Optional[bool] = False) -> None:
+    def __init__(self, hub: Hub, device: Device, temp: bool | None = False) -> None:
         """Initialize a device."""
         self._hub = hub
         self._device = device
-        self._id = get_hub_device_id(hub, device)
-        self._old_ids = [
-            f"{self._hub.host}::{self._hub.app_id}::{self._device.id}",
-        ]
         self._temp = temp
 
     @property
     def device_id(self) -> str:
         """Return the hub-local id for this device."""
         return self._device.id
+
+    @property
+    def device_name(self) -> str:
+        """Return the hub-local name for this device."""
+        return self._device.name
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -57,21 +60,6 @@ class HubitatBase(Removable):
         return info
 
     @property
-    def old_unique_ids(self) -> List[str]:
-        """Return the legacy unique for this device."""
-        return self._old_ids
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique for this device."""
-        return self._id
-
-    @property
-    def name(self) -> str:
-        """Return the display name of this device."""
-        return self._device.label
-
-    @property
     def type(self) -> str:
         """Return the type name of this device."""
         return self._device.type
@@ -81,69 +69,79 @@ class HubitatBase(Removable):
         """Return the room name of this device."""
         return self._device.room
 
-    async def async_will_remove_from_hass(self) -> None:
+    @override
+    async def async_will_remove_from_hass(self):
         """Run when entity will be removed from hass."""
         self._hub.remove_device_listeners(self.device_id)
 
     @callback
-    def get_attr(self, attr: str) -> Union[float, int, str, None]:
+    def get_attr(self, attr: DeviceAttribute) -> float | int | str | datetime | None:
         """Get the current value of an attribute."""
         if attr in self._device.attributes:
             return self._device.attributes[attr].value
         return None
 
     @callback
-    def get_float_attr(self, attr: str) -> Optional[float]:
-        """Get the current value of an attribute."""
-        val = self.get_attr(attr)
-        if val is None:
-            return None
-        return float(val)
+    def get_attr_unit(self, attr: DeviceAttribute) -> str | None:
+        """Get the unit of an attribute."""
+        if attr in self._device.attributes:
+            return self._device.attributes[attr].unit
+        return None
 
     @callback
-    def get_int_attr(self, attr: str) -> Optional[int]:
+    def get_float_attr(self, attr: DeviceAttribute) -> float | None:
         """Get the current value of an attribute."""
-        val = self.get_float_attr(attr)
-        if val is None:
-            return None
-        return round(val)
+        if attr in self._device.attributes:
+            return self._device.attributes[attr].float_value
 
     @callback
-    def get_json_attr(self, attr: str) -> Optional[Dict[str, Any]]:
+    def get_int_attr(self, attr: DeviceAttribute) -> int | None:
         """Get the current value of an attribute."""
-        val = self.get_str_attr(attr)
-        if val is None:
-            return None
-        return cast(Dict[str, Any], loads(val))
+        if attr in self._device.attributes:
+            return self._device.attributes[attr].int_value
 
     @callback
-    def get_str_attr(self, attr: str) -> Optional[str]:
+    def get_json_attr(self, attr: DeviceAttribute) -> dict[str, Any] | None:
         """Get the current value of an attribute."""
-        val = self.get_attr(attr)
-        if val is None:
-            return None
-        return str(val)
+        if attr in self._device.attributes:
+            return self._device.attributes[attr].json_value
 
-    @property
-    def last_update(self) -> float:
-        """Return the last update time of this device."""
-        return self._device.last_update
+    @callback
+    def get_str_attr(self, attr: DeviceAttribute) -> str | None:
+        """Get the current value of an attribute."""
+        if attr in self._device.attributes:
+            return self._device.attributes[attr].str_value
+
+
+class HubitatEntityArgs(TypedDict):
+    hub: Hub
+    device: Device
+    temp: NotRequired[bool]
+    """Whether this entity is temporary"""
 
 
 class HubitatEntity(HubitatBase, UpdateableEntity):
     """An entity related to a Hubitat device."""
 
-    def __init__(self, hub: Hub, device: Device, temp: Optional[bool] = False) -> None:
+    def __init__(
+        self, device_class: str | None = None, **kwargs: Unpack[HubitatEntityArgs]
+    ):
         """Initialize an entity."""
-        super().__init__(hub, device, temp)
+        HubitatBase.__init__(self, **kwargs)
+        UpdateableEntity.__init__(self)
+
+        self._attr_name = self._device.label
+        self._attr_unique_id = get_hub_device_id(self._hub, self._device)
+        self._attr_device_class = device_class
 
         # Sometimes entities may be temporary, created only to compute entity
         # metadata. Don't register device listeners for temprorary entities.
+        temp: bool = kwargs.get("temp", False)
         if not temp:
             self._hub.add_device_listener(self._device.id, self.handle_event)
 
     @property
-    def device_attrs(self) -> Optional[str]:
+    def device_attrs(self) -> tuple[DeviceAttribute, ...] | None:
         return None
 
     @property
@@ -162,9 +160,7 @@ class HubitatEntity(HubitatBase, UpdateableEntity):
         """Fetch new data for this device."""
         await self._hub.refresh_device(self.device_id)
 
-    async def send_command(
-        self, command: str, *args: Optional[Union[int, str]]
-    ) -> None:
+    async def send_command(self, command: str, *args: int | str | None) -> None:
         """Send a command to this device."""
         arg = ",".join([str(a) for a in args]) if args else None
         await self._hub.send_command(self.device_id, command, arg)
@@ -194,4 +190,4 @@ class HubitatEventEmitter(HubitatBase):
 
     def __repr__(self) -> str:
         """Return the representation."""
-        return f"<HubitatEventEmitter {self.name}>"
+        return f"<HubitatEventEmitter {self.device_name}>"
