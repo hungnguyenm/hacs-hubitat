@@ -1,9 +1,11 @@
 """Hubitat sensor entities."""
 
+import re
 from datetime import date, datetime
 from logging import getLogger
-from typing import Type, Unpack
+from typing import TYPE_CHECKING, Type, Unpack
 
+from custom_components.hubitat.util import to_display_name
 from homeassistant.components.sensor import (
     Decimal,
     SensorDeviceClass,
@@ -31,13 +33,13 @@ from homeassistant.const import (
     UnitOfVolumetricFlux,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .device import HubitatEntity, HubitatEntityArgs
 from .entities import create_and_add_entities
 from .hub import get_hub
 from .hubitatmaker import DeviceAttribute
 from .hubitatmaker.types import Device
-from .types import EntityAdder
 
 _LOGGER = getLogger(__name__)
 
@@ -57,6 +59,8 @@ class HubitatSensor(HubitatEntity, SensorEntity):
         device_class: SensorDeviceClass | None = None,
         state_class: SensorStateClass | None = None,
         enabled_default: bool | None = None,
+        # TODO: load options from device
+        options: list[str] | None = None,
         **kwargs: Unpack[HubitatEntityArgs],
     ):
         """Initialize a battery sensor."""
@@ -75,24 +79,26 @@ class HubitatSensor(HubitatEntity, SensorEntity):
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._attr_unique_id = f"{super().unique_id}::sensor::{attribute}"
-        self._enabled_default = enabled_default
+        self._attr_entity_registry_enabled_default = (
+            enabled_default if enabled_default is not None else True
+        )
+
+        if options is not None:
+            self._attr_options = options
+
+        self.load_state()
+
+    def load_state(self):
+        self._attr_native_value = self._get_native_value()
 
     @property
     def device_attrs(self) -> tuple[DeviceAttribute, ...] | None:
         """Return this entity's associated attributes"""
         return (self._attribute,)
 
-    @property
-    def native_value(self) -> StateType | date | datetime | Decimal:
+    def _get_native_value(self) -> StateType | date | datetime | Decimal:
         """Return this sensor's current value."""
         return self.get_attr(self._attribute)
-
-    @property
-    def entity_registry_enabled_default(self) -> bool:
-        """Update sensors are disabled by default."""
-        if self._enabled_default is not None:
-            return self._enabled_default
-        return True
 
 
 class HubitatBatterySensor(HubitatSensor):
@@ -107,6 +113,24 @@ class HubitatBatterySensor(HubitatSensor):
             state_class=SensorStateClass.MEASUREMENT,
             **kwargs,
         )
+
+    def load_state(self):
+        super().load_state()
+        self._attr_native_value = self._get_native_value()
+
+    def _get_native_value(self) -> StateType | date | datetime | Decimal:
+        """Return this battery sensor's current value."""
+        value = self.get_attr(self._attribute)
+        if isinstance(value, str):
+            try:
+                value = float(value)
+            except ValueError:
+                # Some devices don't follow the spec
+                # See https://github.com/jason0x43/hacs-hubitat/issues/252#issuecomment-1896327401
+                match = re.match(r"Battery (\d.*)%", value)
+                if match:
+                    value = float(match.group(1))
+        return value
 
 
 class HubitatEnergySensor(HubitatSensor):
@@ -205,8 +229,11 @@ class HubitatTemperatureSensor(HubitatSensor):
             **kwargs,
         )
 
-    @property
-    def native_unit_of_measurement(self) -> str | None:
+    def load_state(self):
+        super().load_state()
+        self._attr_native_unit_of_measurement = self._get_native_unit_of_measurement()
+
+    def _get_native_unit_of_measurement(self) -> str | None:
         unit: UnitOfTemperature = self._hub.temperature_unit
         attr_unit: str | None = self.get_attr_unit(self._attribute)
         if attr_unit is not None:
@@ -269,6 +296,8 @@ class HubitatCarbonDioxide(HubitatSensor):
         )
 
 
+# This attribute isn't from the Hubitat spec, but appears to be an air quality
+# enumeration. See https://github.com/jason0x43/hacs-hubitat/issues/117
 class HubitatCarbonDioxideLevel(HubitatSensor):
     """A CarbonDioxideLevel sensor."""
 
@@ -276,26 +305,13 @@ class HubitatCarbonDioxideLevel(HubitatSensor):
         """Initialize a CarbonDioxideLevel sensor."""
         super().__init__(
             attribute=DeviceAttribute.CARBON_DIOXIDE_LEVEL,
-            device_class=SensorDeviceClass.CO2,
-            state_class=SensorStateClass.MEASUREMENT,
+            device_class=SensorDeviceClass.ENUM,
+            options=["Good", "Mediocre", "Harmful", "Risk"],
             **kwargs,
         )
 
 
-class HubitatCarbonMonoxide(HubitatSensor):
-    """A CarbonMonoxide sensor."""
-
-    def __init__(self, **kwargs: Unpack[HubitatEntityArgs]):
-        """Initialize a CarbonMonoxide sensor."""
-        super().__init__(
-            attribute=DeviceAttribute.CARBON_MONOXIDE,
-            unit=CONCENTRATION_PARTS_PER_MILLION,
-            device_class=SensorDeviceClass.CO,
-            state_class=SensorStateClass.MEASUREMENT,
-            **kwargs,
-        )
-
-
+# TODO: is this a valid attribute?
 class HubitatCarbonMonoxideLevel(HubitatSensor):
     """A CarbonMonoxideLevel sensor."""
 
@@ -303,6 +319,7 @@ class HubitatCarbonMonoxideLevel(HubitatSensor):
         """Initialize a CarbonMonoxideLevel sensor."""
         super().__init__(
             attribute=DeviceAttribute.CARBON_MONOXIDE_LEVEL,
+            unit=CONCENTRATION_PARTS_PER_MILLION,
             device_class=SensorDeviceClass.CO,
             state_class=SensorStateClass.MEASUREMENT,
             **kwargs,
@@ -648,7 +665,6 @@ _SENSOR_ATTRS: tuple[tuple[DeviceAttribute, Type[HubitatSensor]], ...] = (
     (DeviceAttribute.BATTERY, HubitatBatterySensor),
     (DeviceAttribute.CARBON_DIOXIDE, HubitatCarbonDioxide),
     (DeviceAttribute.CARBON_DIOXIDE_LEVEL, HubitatCarbonDioxideLevel),
-    (DeviceAttribute.CARBON_MONOXIDE, HubitatCarbonMonoxide),
     (DeviceAttribute.CARBON_MONOXIDE_LEVEL, HubitatCarbonMonoxideLevel),
     (DeviceAttribute.CUMULATIVE_CUBIC_METER, HubitatWaterCumulativeM3Sensor),
     (DeviceAttribute.CUMULATIVE_LITER, HubitatWaterCumulativeLiterSensor),
@@ -689,7 +705,7 @@ def is_update_sensor(device: Device, overrides: dict[str, str] | None = None) ->
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: EntityAdder,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Initialize sensor devices."""
 
@@ -729,19 +745,22 @@ async def async_setup_entry(
                         hub=hub,
                         device=device,
                         attribute=attr,
+                        attribute_name=to_display_name(attr),
                         enabled_default=False,
                         device_class=None,
                     )
                 )
-                _LOGGER.debug(f"Adding unknown entity for {device.id}:{attr}")
+                _LOGGER.debug(f"Adding generic sensor for {device.id}:{attr}")
 
     if len(unknown_entities) > 0:
         hub.add_entities(unknown_entities)
         async_add_entities(unknown_entities)
+        for entity in unknown_entities:
+            entity.load_state()
 
 
 def add_hub_entities(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: EntityAdder
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Add entities for hub services."""
 
@@ -757,3 +776,15 @@ def add_hub_entities(
     if len(hub_entities) > 0:
         hub.add_entities(hub_entities)
         async_add_entities(hub_entities)
+        for entity in hub_entities:
+            entity.load_state()
+
+
+if TYPE_CHECKING:
+    from .hub import DEVICE_TYPECHECK, HUB_TYPECHECK
+
+    test_alarm = HubitatSensor(
+        hub=HUB_TYPECHECK,
+        device=DEVICE_TYPECHECK,
+        attribute=DeviceAttribute.MODE,
+    )

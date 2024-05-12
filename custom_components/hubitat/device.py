@@ -2,13 +2,13 @@
 
 from datetime import datetime
 from logging import getLogger
-from typing import Any, NotRequired, TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 from typing_extensions import override
 
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from .const import DOMAIN
 from .hub import Hub
@@ -22,11 +22,10 @@ _LOGGER = getLogger(__name__)
 class HubitatBase(Removable):
     """Base class for Hubitat entities and event emitters."""
 
-    def __init__(self, hub: Hub, device: Device, temp: bool | None = False) -> None:
+    def __init__(self, hub: Hub, device: Device) -> None:
         """Initialize a device."""
         self._hub = hub
         self._device = device
-        self._temp = temp
 
     @property
     def device_id(self) -> str:
@@ -37,27 +36,6 @@ class HubitatBase(Removable):
     def device_name(self) -> str:
         """Return the hub-local name for this device."""
         return self._device.name
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        dev_identifier = self.device_id
-        if self._hub.id != self.device_id:
-            dev_identifier = f"{self._hub.id}:{self.device_id}"
-
-        info: DeviceInfo = {
-            "identifiers": {(DOMAIN, dev_identifier)},
-        }
-
-        # if this entity's device isn't the hub, link it to the hub
-        if self.device_id != self._hub.id:
-            info["name"] = self._device.label
-            info["suggested_area"] = self.room
-            info["via_device"] = (DOMAIN, self._hub.id)
-            info["model"] = self.type
-            info["manufacturer"] = "Hubitat"
-
-        return info
 
     @property
     def type(self) -> str:
@@ -90,25 +68,31 @@ class HubitatBase(Removable):
 
     @callback
     def get_float_attr(self, attr: DeviceAttribute) -> float | None:
-        """Get the current value of an attribute."""
+        """Get the current value of an attribute as a float."""
         if attr in self._device.attributes:
             return self._device.attributes[attr].float_value
 
     @callback
     def get_int_attr(self, attr: DeviceAttribute) -> int | None:
-        """Get the current value of an attribute."""
+        """Get the current value of an attribute as an int."""
         if attr in self._device.attributes:
             return self._device.attributes[attr].int_value
 
     @callback
-    def get_json_attr(self, attr: DeviceAttribute) -> dict[str, Any] | None:
-        """Get the current value of an attribute."""
+    def get_list_attr(self, attr: DeviceAttribute) -> list[Any] | None:
+        """Get the current value of an attribute as a list."""
         if attr in self._device.attributes:
-            return self._device.attributes[attr].json_value
+            return self._device.attributes[attr].list_value
+
+    @callback
+    def get_dict_attr(self, attr: DeviceAttribute) -> dict[str, Any] | None:
+        """Get the current value of an attribute as a dict."""
+        if attr in self._device.attributes:
+            return self._device.attributes[attr].dict_value
 
     @callback
     def get_str_attr(self, attr: DeviceAttribute) -> str | None:
-        """Get the current value of an attribute."""
+        """Get the current value of an attribute as a string."""
         if attr in self._device.attributes:
             return self._device.attributes[attr].str_value
 
@@ -116,45 +100,53 @@ class HubitatBase(Removable):
 class HubitatEntityArgs(TypedDict):
     hub: Hub
     device: Device
-    temp: NotRequired[bool]
-    """Whether this entity is temporary"""
 
 
-class HubitatEntity(HubitatBase, UpdateableEntity):
+class HubitatEntity(HubitatBase, Entity, UpdateableEntity):
     """An entity related to a Hubitat device."""
 
     def __init__(
-        self, device_class: str | None = None, **kwargs: Unpack[HubitatEntityArgs]
+        self,
+        device_class: str | None = None,
+        temp=False,
+        **kwargs: Unpack[HubitatEntityArgs],
     ):
-        """Initialize an entity."""
+        """
+        Initialize an entity.
+
+        Parameters
+        ----------
+        device_class : str | None
+            The device class for this entity; default is None.
+        temp : bool
+            If true, this is a temporary entity; default is False
+        """
         HubitatBase.__init__(self, **kwargs)
         UpdateableEntity.__init__(self)
 
         self._attr_name = self._device.label
         self._attr_unique_id = get_hub_device_id(self._hub, self._device)
         self._attr_device_class = device_class
-
-        # Sometimes entities may be temporary, created only to compute entity
-        # metadata. Don't register device listeners for temprorary entities.
-        temp: bool = kwargs.get("temp", False)
+        self._attr_should_poll = False
+        self._attr_device_info = get_device_info(self._hub, self._device)
         if not temp:
             self._hub.add_device_listener(self._device.id, self.handle_event)
+            _LOGGER.debug(
+                "Added device listener for %s (%s)", self._device.id, self.__class__
+            )
+
+    def __del__(self):
+        self._hub.remove_device_listener(self._device.id, self.handle_event)
+        _LOGGER.debug(
+            "Removed device listener for %s (%s)", self._device.id, self.__class__
+        )
 
     @property
     def device_attrs(self) -> tuple[DeviceAttribute, ...] | None:
         return None
 
-    @property
-    def should_poll(self) -> bool:
-        # Hubitat will push device updates
-        return False
-
-    @property
-    def is_disabled(self) -> bool:
-        """Indicate whether this device is currently disabled."""
-        if self.registry_entry:
-            return self.registry_entry.disabled_by is not None
-        return False
+    async def async_added_to_hass(self) -> None:
+        _LOGGER.debug("Added %s with hass=%s", self, self.hass)
 
     async def async_update(self) -> None:
         """Fetch new data for this device."""
@@ -167,12 +159,15 @@ class HubitatEntity(HubitatBase, UpdateableEntity):
         _LOGGER.debug("sent %s to %s", command, self.device_id)
 
     def handle_event(self, event: Event) -> None:
-        """Handle a device event."""
-        self.update_state()
+        """
+        Handle a device event.
 
-    def update_state(self) -> None:
-        """Request that Home Assistant update this device's state."""
-        if not self.is_disabled:
+        If this entity is enabled, reload the entity state from the underlying
+        device and tell HA that the state has updated.
+        """
+        _LOGGER.debug(f"handling event for {self} ({self.name}, {self.__class__})")
+        if self.enabled:
+            self.load_state()
             self.async_schedule_update_ha_state()
 
 
@@ -185,9 +180,32 @@ class HubitatEventEmitter(HubitatBase):
         # automatically do that as it does for entities.
         entry = self._hub.config_entry
         dreg = device_registry.async_get(self._hub.hass)
-        dreg.async_get_or_create(config_entry_id=entry.entry_id, **self.device_info)
+        dreg.async_get_or_create(
+            config_entry_id=entry.entry_id, **get_device_info(self._hub, self._device)
+        )
         _LOGGER.debug("Created device for %s", self)
 
     def __repr__(self) -> str:
         """Return the representation."""
         return f"<HubitatEventEmitter {self.device_name}>"
+
+
+def get_device_info(hub: Hub, device: Device) -> DeviceInfo:
+    """Return the device info."""
+    dev_identifier = device.id
+    if hub.id != device.id:
+        dev_identifier = f"{hub.id}:{device.id}"
+
+    info: DeviceInfo = {
+        "identifiers": {(DOMAIN, dev_identifier)},
+    }
+
+    # if this entity's device isn't the hub, link it to the hub
+    if device.id != hub.id:
+        info["name"] = device.label
+        info["suggested_area"] = device.room
+        info["via_device"] = (DOMAIN, hub.id)
+        info["model"] = device.type
+        info["manufacturer"] = "Hubitat"
+
+    return info

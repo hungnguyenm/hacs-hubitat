@@ -1,8 +1,8 @@
 """Constants for the Hubitat integration."""
+from enum import StrEnum
 from typing import Literal, get_args
 
 import homeassistant.components.select as _  # noqa: F401
-from homeassistant.backports.enum import StrEnum
 
 from .hubitatmaker import DeviceAttribute, DeviceCapability
 
@@ -41,6 +41,7 @@ class EventName(StrEnum):
     HELD = "held"
     DOUBLE_TAPPED = "double_tapped"
     PUSHED = "pushed"
+    RELEASED = "released"
     CODE_NAME = "code_name"
 
 
@@ -78,6 +79,7 @@ Platform = Literal[
     "binary_sensor",
     "climate",
     "cover",
+    "event",
     "light",
     "lock",
     "select",
@@ -91,6 +93,7 @@ PLATFORMS: tuple[Platform, ...] = get_args(Platform)
 
 class ServiceName(StrEnum):
     CLEAR_CODE = "clear_code"
+    GET_CODES = "get_codes"
     SEND_COMMAND = "send_command"
     SET_CODE = "set_code"
     SET_CODE_LENGTH = "set_code_length"

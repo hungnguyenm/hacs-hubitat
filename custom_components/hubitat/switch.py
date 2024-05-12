@@ -1,8 +1,9 @@
 """Support for Hubitat switches."""
 
 import re
+from enum import StrEnum
 from logging import getLogger
-from typing import Any, Unpack
+from typing import TYPE_CHECKING, Any, Unpack
 
 import voluptuous as vol
 
@@ -12,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, ICON_ALARM, ServiceName
 from .device import HubitatEntity, HubitatEntityArgs
@@ -19,7 +21,6 @@ from .entities import create_and_add_entities, create_and_add_event_emitters
 from .fan import is_fan
 from .hubitatmaker import Device, DeviceCapability, DeviceCommand
 from .light import is_light
-from .types import EntityAdder
 
 _LOGGER = getLogger(__name__)
 
@@ -28,36 +29,45 @@ _NAME_TEST = re.compile(r"\bswitch\b", re.IGNORECASE)
 ENTITY_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_id})
 
 
+class SwitchType(StrEnum):
+    SWITCH = "switch"
+    POWER = "power_meter"
+    ALARM = "alarm"
+
+
 class HubitatSwitch(HubitatEntity, SwitchEntity):
     """Representation of a Hubitat switch."""
 
-    _attribute: DeviceAttribute
-
     def __init__(
-        self, attribute=DeviceAttribute.SWITCH, **kwargs: Unpack[HubitatEntityArgs]
+        self,
+        type: SwitchType = SwitchType.SWITCH,
+        **kwargs: Unpack[HubitatEntityArgs],
     ):
         """Initialize a Hubitat switch."""
         HubitatEntity.__init__(self, **kwargs)
         SwitchEntity.__init__(self)
-        self._attribute = attribute
         self._attr_device_class = (
             SwitchDeviceClass.SWITCH
             if _NAME_TEST.search(self._device.label)
             else SwitchDeviceClass.OUTLET
         )
         self._attr_unique_id = f"{super().unique_id}::switch"
-        if attribute != DeviceAttribute.SWITCH:
-            self._attr_unique_id += f"::{attribute}"
+        if type != SwitchType.SWITCH:
+            self._attr_unique_id += f"::{type}"
+
+        self.load_state()
+
+    def load_state(self):
+        self._attr_is_on = self._get_is_on()
+
+    def _get_is_on(self) -> bool:
+        """Return True if the switch is on."""
+        return self.get_str_attr(DeviceAttribute.SWITCH) == "on"
 
     @property
     def device_attrs(self) -> tuple[DeviceAttribute, ...] | None:
         """Return this entity's associated attributes"""
         return (DeviceAttribute.SWITCH, DeviceAttribute.POWER)
-
-    @property
-    def is_on(self) -> bool:
-        """Return True if the switch is on."""
-        return self.get_str_attr(DeviceAttribute.SWITCH) == "on"
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the switch."""
@@ -73,7 +83,7 @@ class HubitatSwitch(HubitatEntity, SwitchEntity):
 class HubitatPowerMeterSwitch(HubitatSwitch):
     def __init__(self, **kwargs: Unpack[HubitatEntityArgs]):
         """Initialize a Hubitat power meter switch."""
-        super().__init__(attribute=DeviceAttribute.POWER, **kwargs)
+        super().__init__(type=SwitchType.POWER, **kwargs)
 
     @property
     def current_power_w(self) -> float | None:
@@ -84,7 +94,7 @@ class HubitatPowerMeterSwitch(HubitatSwitch):
 class HubitatAlarm(HubitatSwitch):
     def __init__(self, **kwargs: Unpack[HubitatEntityArgs]):
         """Initialize a Hubitat alarm."""
-        super().__init__(attribute=DeviceAttribute.ALARM, **kwargs)
+        super().__init__(type=SwitchType.ALARM, **kwargs)
         self._attr_name = f"{super(HubitatEntity, self).name} Alarm".title()
         self._attr_icon = ICON_ALARM
 
@@ -139,7 +149,7 @@ def is_button_controller(device: Device) -> bool:
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: EntityAdder,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Initialize switch devices."""
 
@@ -203,3 +213,12 @@ async def async_setup_entry(
         hass.services.async_register(
             DOMAIN, ServiceName.ALARM_STROBE_ON, strobe_on, schema=ENTITY_SCHEMA
         )
+
+
+if TYPE_CHECKING:
+    from .hub import DEVICE_TYPECHECK, HUB_TYPECHECK
+
+    test_alarm = HubitatSwitch(
+        hub=HUB_TYPECHECK,
+        device=DEVICE_TYPECHECK,
+    )

@@ -1,21 +1,9 @@
 repos:
 - repo: local
   hooks:
-  - id: black
-    name: black
-    entry: pdm run black
-    args:
-      - --safe
-      - --quiet
-    language: system
-    types: [python]
-    require_serial: true
-    files: ^(custom_components|tests|stubs)/.+\.pyi?$
-- repo: local
-  hooks:
   - id: ruff
     name: ruff
-    entry: pdm run ruff --fix
+    entry: rye run ruff --fix
     language: system
     types: [python]
     require_serial: true
@@ -24,7 +12,7 @@ repos:
   hooks:
   - id: pyright
     name: pyright
-    entry: pyright
+    entry: rye run pyright
     language: system
     types: [python]
     require_serial: true

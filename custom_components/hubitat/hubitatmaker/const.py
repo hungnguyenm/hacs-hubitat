@@ -1,4 +1,4 @@
-from homeassistant.backports.enum import StrEnum
+from enum import StrEnum
 
 
 class DeviceCapability(StrEnum):
@@ -133,6 +133,7 @@ class DeviceAttribute(StrEnum):
     NATURAL_GAS = "naturalGas"
     NEST_MODE = "nestThermostatMode"
     NEST_SUPPORTED_MODES = "supportedNestThermostatModes"
+    NETWORK_STATUS = "networkStatus"
     NUM_BUTTONS = "numberOfButtons"
     OPERATING_STATE = "thermostatOperatingState"
     PH = "pH"
@@ -167,6 +168,7 @@ class DeviceAttribute(StrEnum):
     STATUS = "status"
     STEPS = "steps"
     SUPPORTED_FAN_MODES = "supportedThermostatFanModes"
+    SUPPORTED_FAN_SPEEDS = "supportedFanSpeeds"
     SUPPORTED_MODES = "supportedThermostatModes"
     SWITCH = "switch"
     TAMPER = "tamper"

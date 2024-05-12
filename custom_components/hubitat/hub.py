@@ -2,10 +2,9 @@ import os
 import ssl
 from logging import getLogger
 from ssl import SSLContext
-from typing import Any, Callable, Mapping, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, TypeVar, cast
 
 from custom_components.hubitat.hubitatmaker.const import DeviceAttribute
-from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_HIDDEN,
@@ -48,7 +47,6 @@ Listener = Callable[[Event], None]
 
 HUB_DEVICE_NAME = "Hub"
 HUB_NAME = "Hubitat Elevation"
-
 
 # Hubitat attributes that should be emitted as HA events
 _TRIGGER_ATTRS = tuple([v.attr for v in TRIGGER_CAPABILITIES.values()])
@@ -179,6 +177,18 @@ class Hub:
             if device_id not in self._device_listeners:
                 self._device_listeners[device_id] = []
             self._device_listeners[device_id].append(listener)
+
+    def remove_device_listener(self, device_id: str, listener: Listener) -> None:
+        """Remove a listener for events for a specific device."""
+        if device_id == self.id:
+            if listener in self._hub_device_listeners:
+                self._hub_device_listeners.remove(listener)
+        else:
+            if (
+                device_id in self._device_listeners
+                and listener in self._device_listeners[device_id]
+            ):
+                self._device_listeners[device_id].remove(listener)
 
     def add_entities(self, entities: list[E]) -> None:
         """Add entities to this hub."""
@@ -421,8 +431,7 @@ class Hub:
         if temp_unit != hub.temperature_unit:
             hub.set_temperature_unit(temp_unit)
             for entity in hub.entities:
-                if entity.device_class == SensorDeviceClass.TEMPERATURE:
-                    entity.update_state()
+                entity.load_state()
             _LOGGER.debug("Set temperature units to %s", temp_unit)
 
         hass.states.async_set(
@@ -472,7 +481,10 @@ class Hub:
         """Handle events received from the Hubitat hub."""
         if self._device_listeners[event.device_id]:
             for listener in self._device_listeners[event.device_id]:
-                listener(event)
+                try:
+                    listener(event)
+                except Exception as e:
+                    _LOGGER.warn(f"Error handling event {event}: {e}")
         if event.attribute in _TRIGGER_ATTRS:
             evt: dict[str, Any] = dict(event)
             evt[ATTR_ATTRIBUTE] = _TRIGGER_ATTR_MAP[event.attribute]
@@ -590,3 +602,23 @@ def _update_device_ids(hub_id: str, hass: HomeAssistant) -> None:
             _LOGGER.info(
                 f"Updated identifiers of device {dev.identifiers} to {new_ids}"
             )
+
+
+HUB_TYPECHECK: Hub
+"""A hub instance that will only exist during development."""
+
+DEVICE_TYPECHECK: Device
+"""A device instance that will only exist during development."""
+
+if TYPE_CHECKING:
+    test_hass = HomeAssistant("")
+    test_entry = ConfigEntry(
+        version=1,
+        domain="Hubitat",
+        title="Hubitat",
+        data={},
+        source="",
+        minor_version=0,  # type: ignore
+    )
+    HUB_TYPECHECK = Hub(hass=test_hass, entry=test_entry, index=0)
+    DEVICE_TYPECHECK = Device({})
