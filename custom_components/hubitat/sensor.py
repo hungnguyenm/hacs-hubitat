@@ -2,16 +2,18 @@
 
 import re
 from datetime import date, datetime
+from decimal import Decimal
 from logging import getLogger
-from typing import TYPE_CHECKING, Type, Unpack
+from typing import TYPE_CHECKING, Optional, Type, Unpack
 
+from custom_components.hubitat.hubitatmaker.const import DeviceCapability
 from custom_components.hubitat.util import to_display_name
 from homeassistant.components.sensor import (
-    Decimal,
-    SensorDeviceClass,
     SensorEntity,
+)
+from homeassistant.components.sensor.const import (
+    SensorDeviceClass,
     SensorStateClass,
-    StateType,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -34,6 +36,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import StateType
 
 from .device import HubitatEntity, HubitatEntityArgs
 from .entities import create_and_add_entities
@@ -42,6 +45,18 @@ from .hubitatmaker import DeviceAttribute
 from .hubitatmaker.types import Device
 
 _LOGGER = getLogger(__name__)
+
+PRESSURE_UNITS: dict[str, UnitOfPressure] = {
+    "pa": UnitOfPressure.PA,
+    "hpa": UnitOfPressure.HPA,
+    "kpa": UnitOfPressure.KPA,
+    "bar": UnitOfPressure.BAR,
+    "cbar": UnitOfPressure.CBAR,
+    "mbar": UnitOfPressure.MBAR,
+    "mmhg": UnitOfPressure.MMHG,
+    "inhg": UnitOfPressure.INHG,
+    "psi": UnitOfPressure.PSI,
+}
 
 
 class HubitatSensor(HubitatEntity, SensorEntity):
@@ -280,6 +295,21 @@ class HubitatPressureSensor(HubitatSensor):
             state_class=SensorStateClass.MEASUREMENT,
             **kwargs,
         )
+
+    def load_state(self):
+        super().load_state()
+        self._attr_native_unit_of_measurement = self._get_native_unit_of_measurement()
+
+    def _get_native_unit_of_measurement(self) -> str | None:
+        """Return this sensor's current value."""
+        attr_unit = self.get_attr_unit(self._attribute)
+        if attr_unit is not None:
+            lower_unit = attr_unit.lower()
+            if lower_unit in PRESSURE_UNITS:
+                _LOGGER.debug(f"Using Hubitat unit {attr_unit} for {self.unique_id}")
+                return PRESSURE_UNITS[lower_unit]
+        _LOGGER.debug(f"Using default unit mbar for {self.unique_id}")
+        return UnitOfPressure.MBAR
 
 
 class HubitatCarbonDioxide(HubitatSensor):
@@ -658,42 +688,44 @@ class HubitatHubModeSensor(HubitatSensor):
         )
 
 
-_SENSOR_ATTRS: tuple[tuple[DeviceAttribute, Type[HubitatSensor]], ...] = (
-    (DeviceAttribute.AIR_QUALITY_INDEX, HubitatAirQualityIndexSensor),
-    (DeviceAttribute.AMPERAGE, HubitatCurrentSensor),
-    (DeviceAttribute.AQI, HubitatAqiSensor),
-    (DeviceAttribute.BATTERY, HubitatBatterySensor),
-    (DeviceAttribute.CARBON_DIOXIDE, HubitatCarbonDioxide),
-    (DeviceAttribute.CARBON_DIOXIDE_LEVEL, HubitatCarbonDioxideLevel),
-    (DeviceAttribute.CARBON_MONOXIDE_LEVEL, HubitatCarbonMonoxideLevel),
-    (DeviceAttribute.CUMULATIVE_CUBIC_METER, HubitatWaterCumulativeM3Sensor),
-    (DeviceAttribute.CUMULATIVE_LITER, HubitatWaterCumulativeLiterSensor),
-    (DeviceAttribute.DAY_CUBIC_METER, HubitatWaterDayM3Sensor),
-    (DeviceAttribute.DAY_EURO, HubitatWaterDayPriceSensor),
-    (DeviceAttribute.DAY_LITER, HubitatWaterDayLiterSensor),
-    (DeviceAttribute.DEW_POINT, HubitatDewPointSensor),
-    (DeviceAttribute.ENERGY, HubitatEnergySensor),
-    (DeviceAttribute.ENERGY_SOURCE, HubitatEnergySourceSensor),
-    (DeviceAttribute.HOME_HEALTH, HubitatHomeHealth),
-    (DeviceAttribute.HUMIDITY, HubitatHumiditySensor),
-    (DeviceAttribute.ILLUMINANCE, HubitatIlluminanceSensor),
-    (DeviceAttribute.PM1, HubitatPm1Sensor),
-    (DeviceAttribute.PM10, HubitatPm10Sensor),
-    (DeviceAttribute.PM25, HubitatPm25Sensor),
-    (DeviceAttribute.POWER, HubitatPowerSensor),
-    (DeviceAttribute.POWER_SOURCE, HubitatPowerSourceSensor),
-    (DeviceAttribute.PRESSURE, HubitatPressureSensor),
-    (DeviceAttribute.RAIN_DAILY, HubitatRainDailySensor),
-    (DeviceAttribute.RAIN_RATE, HubitatRainRateSensor),
-    (DeviceAttribute.RATE, HubitatRateSensor),
-    (DeviceAttribute.TEMPERATURE, HubitatTemperatureSensor),
-    (DeviceAttribute.UV, HubitatUVIndexSensor),
-    (DeviceAttribute.VOC, HubitatVOC),
-    (DeviceAttribute.VOC_LEVEL, HubitatVOCLevel),
-    (DeviceAttribute.VOLTAGE, HubitatVoltageSensor),
-    (DeviceAttribute.WIND_DIRECTION, HubitatWindDirectionSensor),
-    (DeviceAttribute.WIND_GUST, HubitatWindGustSensor),
-    (DeviceAttribute.WIND_SPEED, HubitatWindSpeedSensor),
+_SENSOR_ATTRS: tuple[
+    tuple[DeviceAttribute, Type[HubitatSensor], Optional[DeviceCapability]], ...
+] = (
+    (DeviceAttribute.AIR_QUALITY_INDEX, HubitatAirQualityIndexSensor, None),
+    (DeviceAttribute.AMPERAGE, HubitatCurrentSensor, None),
+    (DeviceAttribute.AQI, HubitatAqiSensor, None),
+    (DeviceAttribute.BATTERY, HubitatBatterySensor, None),
+    (DeviceAttribute.CARBON_DIOXIDE, HubitatCarbonDioxide, None),
+    (DeviceAttribute.CARBON_DIOXIDE_LEVEL, HubitatCarbonDioxideLevel, None),
+    (DeviceAttribute.CARBON_MONOXIDE_LEVEL, HubitatCarbonMonoxideLevel, None),
+    (DeviceAttribute.CUMULATIVE_CUBIC_METER, HubitatWaterCumulativeM3Sensor, None),
+    (DeviceAttribute.CUMULATIVE_LITER, HubitatWaterCumulativeLiterSensor, None),
+    (DeviceAttribute.DAY_CUBIC_METER, HubitatWaterDayM3Sensor, None),
+    (DeviceAttribute.DAY_EURO, HubitatWaterDayPriceSensor, None),
+    (DeviceAttribute.DAY_LITER, HubitatWaterDayLiterSensor, None),
+    (DeviceAttribute.DEW_POINT, HubitatDewPointSensor, None),
+    (DeviceAttribute.ENERGY, HubitatEnergySensor, None),
+    (DeviceAttribute.ENERGY_SOURCE, HubitatEnergySourceSensor, None),
+    (DeviceAttribute.HOME_HEALTH, HubitatHomeHealth, None),
+    (DeviceAttribute.HUMIDITY, HubitatHumiditySensor, None),
+    (DeviceAttribute.ILLUMINANCE, HubitatIlluminanceSensor, None),
+    (DeviceAttribute.PM1, HubitatPm1Sensor, None),
+    (DeviceAttribute.PM10, HubitatPm10Sensor, None),
+    (DeviceAttribute.PM25, HubitatPm25Sensor, None),
+    (DeviceAttribute.POWER, HubitatPowerSensor, DeviceCapability.POWER_METER),
+    (DeviceAttribute.POWER_SOURCE, HubitatPowerSourceSensor, None),
+    (DeviceAttribute.PRESSURE, HubitatPressureSensor, None),
+    (DeviceAttribute.RAIN_DAILY, HubitatRainDailySensor, None),
+    (DeviceAttribute.RAIN_RATE, HubitatRainRateSensor, None),
+    (DeviceAttribute.RATE, HubitatRateSensor, None),
+    (DeviceAttribute.TEMPERATURE, HubitatTemperatureSensor, None),
+    (DeviceAttribute.UV, HubitatUVIndexSensor, None),
+    (DeviceAttribute.VOC, HubitatVOC, None),
+    (DeviceAttribute.VOC_LEVEL, HubitatVOCLevel, None),
+    (DeviceAttribute.VOLTAGE, HubitatVoltageSensor, None),
+    (DeviceAttribute.WIND_DIRECTION, HubitatWindDirectionSensor, None),
+    (DeviceAttribute.WIND_GUST, HubitatWindGustSensor, None),
+    (DeviceAttribute.WIND_SPEED, HubitatWindSpeedSensor, None),
 )
 
 
@@ -717,12 +749,17 @@ async def async_setup_entry(
     )
 
     for attr in _SENSOR_ATTRS:
+        attr_name, Sensor, capability = attr
 
         def is_sensor(device: Device, overrides: dict[str, str] | None = None) -> bool:
-            return attr[0] in device.attributes
+            if attr_name not in device.attributes:
+                return False
+            if capability is not None and capability not in device.capabilities:
+                return False
+            return True
 
         create_and_add_entities(
-            hass, entry, async_add_entities, "sensor", attr[1], is_sensor
+            hass, entry, async_add_entities, "sensor", Sensor, is_sensor
         )
 
     # Create sensor entities for any attributes that don't correspond to known

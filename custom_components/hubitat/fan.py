@@ -39,6 +39,15 @@ class HubitatFan(HubitatEntity, FanEntity):
         HubitatEntity.__init__(self, **kwargs)
         FanEntity.__init__(self)
         self._attr_supported_features = FanEntityFeature.SET_SPEED
+
+        # Enable TURN_ON and TURN_OFF when used with a supporting version of
+        # HomeAssistant
+        if "TURN_ON" in FanEntityFeature.__members__:
+            self._attr_supported_features |= (
+                FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF  # type: ignore
+            )
+            self._enable_turn_on_off_backwards_compatibility  # type: ignore
+
         self._attr_unique_id = f"{super().unique_id}::fan"
         self.load_state()
 
